@@ -3,7 +3,7 @@
 
 - **Time**: 2-3 hours
 - **API Budget**: $5 maximum - API key will be provided in Whatsapp
-- Implement the challenge within your forked repo.
+- Implement the challenge within your repo.
 - The scripts are provided in the repository
 
 ### Goal:
