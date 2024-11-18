@@ -22,7 +22,7 @@ You aim to write a tool that uses generative AI to wrap existing scripts (The sc
         - Ensure the AI validates that the script functions correctly within the Dockerfile.
         - Optimize the API usage to stay within budget and ensure the prompts are reliable.
 2. **Required Deliverables**:
-    - Provide clear instructions on how to run the code with the prompts.
+    - Provide clear instructions on how to run the Tool.
     - Using the provided code and prompts, demonstrate how a new CLI tool can be added and wrapped in a Docker file.
 
 Bonuses [Optional]- If you still have time and want to take this challenge to the next level:
