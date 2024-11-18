@@ -4,7 +4,7 @@
 - **Time**: 2-3 hours
 - **API Budget**: $5 maximum - API key will be provided in Whatsapp
 - Implement the challenge within your forked repo.
-- The scripts are provided in the repository link
+- The scripts are provided in the repository
 
 ### Goal:
 
@@ -12,7 +12,7 @@ You aim to write a tool that uses generative AI to wrap existing scripts (The sc
 
 - Generate a Dockerfile that wraps the provided script.
 - Build & Test the image and run it with an example that uses the provided script, ensuring that it works properly.
-- The tool needs to be generic and work on different scripts. You can assume that in the input, you'll get the script's GitHub repo and an example usage. This example can be used to verify that the wrapped version works properly.
+- The tool needs to be generic and work on different scripts. You can assume that in the input, you'll get the script's in the challenge repo and an example usage. This example can be used to verify that the wrapped version works properly.
 
 ### Backend (BE) Task:
 
