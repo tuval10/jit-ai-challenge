@@ -1,4 +1,4 @@
-import { dockerfileGenerationNode } from '../../src/nodes/dockerfile-generation.node';
+import { dockerfileGenerationNode } from '../../src/nodes/dockerfile-generation';
 import { DockerGenerationState } from '../../src/types';
 
 const createMockLLM = (response: string) =>
@@ -10,6 +10,7 @@ describe('dockerfileGenerationNode', () => {
   const mockState: DockerGenerationState = {
     scriptContent: 'print("Hello World")',
     scriptPath: 'test.py',
+    readmePath: 'README.md',
     usageInfo: {
       command: 'python test.py "input"',
       example: 'python test.py "Hello"',

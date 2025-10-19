@@ -1,4 +1,4 @@
-import { ScriptAnalyzerImpl } from '../../src/core/script-analyzer';
+import { ScriptAnalyzerImpl } from '../../src/nodes/script-analyzer/script-analyzer';
 import { join } from 'path';
 
 describe('Example Scripts Integration Tests', () => {
@@ -67,15 +67,48 @@ describe('Example Scripts Integration Tests', () => {
       }
     });
 
-    it('should extract usage patterns with LLM for all script types', async () => {
+    it('should analyze scripts with LLM for all script types', async () => {
+      const languageInfo: Record<string, any> = {
+        bash: {
+          name: 'bash',
+          runtime: 'bash',
+          baseImage: 'alpine:latest',
+          dependencies: [],
+        },
+        nodejs: {
+          name: 'nodejs',
+          version: '18',
+          runtime: 'node',
+          baseImage: 'node:18-alpine',
+          packageManager: 'npm',
+          dependencies: [],
+        },
+        python: {
+          name: 'python',
+          version: '3.9',
+          runtime: 'python3',
+          baseImage: 'python:3.9-alpine',
+          packageManager: 'pip',
+          dependencies: [],
+        },
+      };
+
       for (const script of testScripts) {
+        const langKey =
+          script.language.toLowerCase() === 'node.js'
+            ? 'nodejs'
+            : script.language.toLowerCase();
         const mockLLM = {
           invoke: jest.fn().mockResolvedValue({
-            content: JSON.stringify(script.mockResponse),
+            content: JSON.stringify({
+              language: languageInfo[langKey],
+              usage: script.mockResponse,
+            }),
           }),
         } as any;
 
-        const usageInfo = await analyzer.extractUsagePattern(
+        const result = await analyzer.analyzeScript(
+          script.scriptPath,
           script.readmePath,
           mockLLM
         );
@@ -84,10 +117,11 @@ describe('Example Scripts Integration Tests', () => {
         expect(mockLLM.invoke).toHaveBeenCalled();
 
         // Verify response matches expected
-        expect(usageInfo.command).toBe(script.mockResponse.command);
-        expect(usageInfo.expectedOutput).toBe(
+        expect(result.usage.command).toBe(script.mockResponse.command);
+        expect(result.usage.expectedOutput).toBe(
           script.mockResponse.expectedOutput
         );
+        expect(result.language).toBeDefined();
       }
     });
   });
@@ -99,14 +133,18 @@ describe('Example Scripts Integration Tests', () => {
       ).rejects.toThrow('Failed to read script file');
     });
 
-    it('should handle non-existent README files gracefully', async () => {
+    it('should handle non-existent files gracefully', async () => {
       const mockLLM = {
         invoke: jest.fn().mockRejectedValue(new Error('File not found')),
       } as any;
 
       await expect(
-        analyzer.extractUsagePattern('non-existent-readme.md', mockLLM)
-      ).rejects.toThrow('Failed to extract usage pattern');
+        analyzer.analyzeScript(
+          'non-existent-script.py',
+          'non-existent-readme.md',
+          mockLLM
+        )
+      ).rejects.toThrow('Failed to analyze script');
     });
 
     it('should handle LLM failures', async () => {
@@ -114,11 +152,12 @@ describe('Example Scripts Integration Tests', () => {
         invoke: jest.fn().mockRejectedValue(new Error('LLM API Error')),
       } as any;
 
+      const scriptPath = join(__dirname, '../fixtures/line_counter.sh');
       const readmePath = join(__dirname, '../fixtures/README_line_counter.md');
 
       await expect(
-        analyzer.extractUsagePattern(readmePath, failingLLM)
-      ).rejects.toThrow('Failed to extract usage pattern');
+        analyzer.analyzeScript(scriptPath, readmePath, failingLLM)
+      ).rejects.toThrow('Failed to analyze script');
     });
   });
 });

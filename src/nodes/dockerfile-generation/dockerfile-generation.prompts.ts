@@ -1,10 +1,13 @@
-import { type DetectedLanguage, type UsageInfo } from '../types';
+import {
+  type DetectedLanguage,
+  type UsageInfo,
+} from '../script-analyzer/types';
 import { basename } from 'path';
 
 export const DOCKERFILE_GENERATION_PROMPT = (
   detectedLanguage: DetectedLanguage,
   usageInfo: UsageInfo,
-  scriptPath: string,
+  scriptPath: string
 ): string => {
   const scriptFilename = basename(scriptPath);
 

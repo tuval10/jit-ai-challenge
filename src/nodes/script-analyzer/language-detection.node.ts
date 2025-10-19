@@ -1,23 +1,45 @@
-import { type DockerGenerationState, type DetectedLanguage } from '../types';
-import { LANGUAGE_DETECTION_PROMPT } from '../prompts';
-import { validateDetectedLanguage, safeJsonParse } from '../schemas';
-import { ROUTES } from '../graphs/docker-generation-graph';
-import { type SupportedLLM } from '../config/llm-providers';
+import { type DockerGenerationState } from '../../types';
+import { type DetectedLanguage } from './types';
+import { SCRIPT_ANALYSIS_PROMPT } from './script-analysis.prompts';
+import {
+  validateDetectedLanguage,
+  validateScriptAnalysis,
+  safeJsonParse,
+} from './schemas';
+import { ROUTES } from '../../graphs/docker-generation-graph';
+import { type SupportedLLM } from '../../config/llm-providers';
 
 const MAX_RETRIES = 3;
 
 export async function languageDetectionNode(
   state: DockerGenerationState,
-  llm: SupportedLLM,
+  llm: SupportedLLM
 ): Promise<Partial<DockerGenerationState>> {
+  // If language is already detected (from comprehensive analysis), skip detection
+  if (state.detectedLanguage) {
+    console.log(
+      `✅ Language already detected: ${state.detectedLanguage.name} (${state.detectedLanguage.runtime})`
+    );
+    return {
+      detectedLanguage: state.detectedLanguage,
+      languageDetectionRetries: 0,
+    };
+  }
+
+  // Otherwise, perform language detection (fallback for legacy flows)
   const retryCount = state.languageDetectionRetries ?? 0;
 
   try {
-    const prompt = LANGUAGE_DETECTION_PROMPT(
+    console.log('🔍 Detecting language...');
+
+    // Note: This is a fallback path. The preferred flow is to use
+    // ScriptAnalyzer.analyzeScript() which does comprehensive analysis
+    const prompt = SCRIPT_ANALYSIS_PROMPT(
       state.scriptContent,
       state.scriptPath,
-      state.usageInfo,
-      retryCount > 0 ? retryCount : undefined, // Pass retry context to prompt
+      '', // No README content in fallback path
+      '',
+      retryCount > 0 ? retryCount : undefined
     );
 
     const response = await llm.invoke([{ role: 'user', content: prompt }]);
@@ -30,28 +52,35 @@ export async function languageDetectionNode(
         : JSON.stringify(response.content);
 
     try {
-      // First try direct parsing
-      detectedLanguage = safeJsonParse(responseText, validateDetectedLanguage);
+      // Try to parse as comprehensive analysis first
+      const analysis = safeJsonParse(responseText, validateScriptAnalysis);
+      detectedLanguage = analysis.language;
     } catch (parseError) {
       // Fallback: try to extract JSON from response
       const jsonMatch = responseText.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        detectedLanguage = safeJsonParse(
-          jsonMatch[0],
-          validateDetectedLanguage,
-        );
+        try {
+          const analysis = safeJsonParse(jsonMatch[0], validateScriptAnalysis);
+          detectedLanguage = analysis.language;
+        } catch {
+          // Last resort: try parsing as just language
+          detectedLanguage = safeJsonParse(
+            jsonMatch[0],
+            validateDetectedLanguage
+          );
+        }
       } else {
         throw new Error(
           `Failed to parse JSON response. Response: ${responseText.substring(
             0,
-            200,
-          )}...`,
+            200
+          )}...`
         );
       }
     }
 
     console.log(
-      `🔍 Detected language: ${detectedLanguage.name} (${detectedLanguage.runtime})`,
+      `🔍 Detected language: ${detectedLanguage.name} (${detectedLanguage.runtime})`
     );
 
     return {
@@ -62,7 +91,7 @@ export async function languageDetectionNode(
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error(
       `Language detection failed (attempt ${retryCount + 1}):`,
-      errorMessage,
+      errorMessage
     );
 
     // Return state for potential retry
@@ -79,13 +108,13 @@ type LanguageDetectionRoute =
 
 // Helper function to determine if we should retry language detection
 export function shouldRetryLanguageDetection(
-  state: DockerGenerationState,
+  state: DockerGenerationState
 ): LanguageDetectionRoute {
   const retryCount = state.languageDetectionRetries ?? 0;
   const maxRetries = state.maxRetries ?? MAX_RETRIES;
 
   console.log(
-    `[DEBUG] shouldRetryLanguageDetection - retryCount: ${retryCount}, maxRetries: ${maxRetries}, hasDetectedLanguage: ${!!state.detectedLanguage}`,
+    `[DEBUG] shouldRetryLanguageDetection - retryCount: ${retryCount}, maxRetries: ${maxRetries}, hasDetectedLanguage: ${!!state.detectedLanguage}`
   );
 
   // If we have a detected language, continue
@@ -97,14 +126,14 @@ export function shouldRetryLanguageDetection(
   // If we haven't exceeded retries, retry
   if (retryCount < maxRetries) {
     console.log(
-      `⚠️  Language detection failed, retrying (${retryCount}/${maxRetries})`,
+      `⚠️  Language detection failed, retrying (${retryCount}/${maxRetries})`
     );
     return ROUTES.LANGUAGE_DETECTION.RETRY;
   }
 
   // Otherwise, fail
   console.error(
-    `❌ Language detection failed after maximum retries (${retryCount}/${maxRetries})`,
+    `❌ Language detection failed after maximum retries (${retryCount}/${maxRetries})`
   );
   return ROUTES.LANGUAGE_DETECTION.FAIL;
 }

@@ -1,8 +1,8 @@
-import { type DetectedLanguage } from '../types';
+import { type DetectedLanguage } from '../script-analyzer/types';
 
 export const DOCKERFILE_OPTIMIZATION_PROMPT = (
   dockerfile: string,
-  detectedLanguage: DetectedLanguage,
+  detectedLanguage: DetectedLanguage
 ): string => `
 You are a Docker optimization expert. Optimize the following Dockerfile for production use.
 

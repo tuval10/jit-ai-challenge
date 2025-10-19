@@ -1,7 +1,7 @@
 import {
   type ScriptAnalyzer,
   ScriptAnalyzerImpl,
-} from './core/script-analyzer';
+} from './nodes/script-analyzer';
 import { type DockerManager, DockerManagerImpl } from './core/docker-manager';
 import { DockerGenerationGraph } from './graphs/docker-generation-graph';
 import { type SupportedLLM } from './config/llm-providers';
@@ -22,9 +22,9 @@ export class ScriptDockerizer {
   private readonly graph: DockerGenerationGraph;
 
   constructor(
-    private readonly llm: SupportedLLM,
+    llm: SupportedLLM,
     analyzer?: ScriptAnalyzer,
-    dockerManager?: DockerManager,
+    dockerManager?: DockerManager
   ) {
     this.analyzer = analyzer || new ScriptAnalyzerImpl();
     this.dockerManager = dockerManager || new DockerManagerImpl();
@@ -36,7 +36,7 @@ export class ScriptDockerizer {
       await execAsync('docker info');
     } catch (error: any) {
       throw new Error(
-        'Docker daemon is not running. Please start Docker Desktop and try again.',
+        'Docker daemon is not running. Please start Docker Desktop and try again.'
       );
     }
   }
@@ -44,7 +44,7 @@ export class ScriptDockerizer {
   async execute(
     scriptPath: string,
     readmePath: string,
-    options: { skipTest?: boolean; cleanup?: boolean } = {},
+    options: { skipTest?: boolean; cleanup?: boolean } = {}
   ): Promise<DockerGenerationResult> {
     if (!scriptPath) {
       throw new Error('scriptPath is required');
@@ -76,23 +76,24 @@ export class ScriptDockerizer {
     try {
       console.log(`🚀 Starting Docker generation for: ${absoluteScriptPath}`);
 
-      // Step 1: Analyze script and extract usage info
-      const [scriptContent, usageInfo] = await Promise.all([
-        this.analyzer.readScriptContent(absoluteScriptPath),
-        this.analyzer.extractUsagePattern(absoluteReadmePath, this.llm),
-      ]);
+      // Step 1: Read script content
+      const scriptContent = await this.analyzer.readScriptContent(
+        absoluteScriptPath
+      );
 
-      // Step 2: Execute LangGraph workflow
+      // Step 2: Execute LangGraph workflow (analysis happens inside the graph)
       const initialState: DockerGenerationState = {
         scriptContent,
         scriptPath: absoluteScriptPath,
-        usageInfo,
+        readmePath: absoluteReadmePath,
       };
 
       const result = await this.graph.invoke(initialState);
 
-      if (!result.dockerfile || !result.detectedLanguage) {
-        throw new Error('Failed to generate Dockerfile');
+      if (!result.dockerfile || !result.detectedLanguage || !result.usageInfo) {
+        throw new Error(
+          'Failed to generate Dockerfile or complete script analysis'
+        );
       }
 
       console.log('📄 Generated Dockerfile:');
@@ -104,7 +105,7 @@ export class ScriptDockerizer {
       const buildResult = await this.dockerManager.buildImage(
         result.dockerfile,
         '/tmp/claude',
-        absoluteScriptPath,
+        absoluteScriptPath
       );
 
       if (!buildResult.success) {
@@ -113,10 +114,13 @@ export class ScriptDockerizer {
 
       // Step 4: Test the image (unless skipped)
       if (!options.skipTest) {
+        if (!result.usageInfo) {
+          throw new Error('Usage information not available for testing');
+        }
         console.log('🧪 Testing Docker image...');
         const testPassed = await this.dockerManager.testScript(
           buildResult.imageId,
-          usageInfo,
+          result.usageInfo
         );
 
         if (!testPassed) {
@@ -132,19 +136,20 @@ export class ScriptDockerizer {
       } else {
         console.log(`💾 Docker image created: ${buildResult.imageId}`);
         console.log(
-          `   Run with: docker run --rm ${buildResult.imageId} "<input>"`,
+          `   Run with: docker run --rm ${buildResult.imageId} "<input>"`
         );
       }
 
       return {
         dockerfile: result.dockerfile,
         detectedLanguage: result.detectedLanguage,
+        usageInfo: result.usageInfo,
         validationResult: result.validationResult,
         buildResult,
         optimizationApplied: result.optimizationApplied,
       };
     } catch (error: any) {
-      console.error('❌ Docker generation failed:', error.message);
+      // Error already logged by graph workflow, just re-throw
       throw error;
     }
   }

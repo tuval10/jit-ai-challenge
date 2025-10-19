@@ -1,24 +1,11 @@
-export interface DetectedLanguage {
-  name: string; // e.g., 'bash', 'python', 'ruby', 'go', etc.
-  version?: string; // e.g., '3.9', '18', 'latest'
-  runtime: string; // e.g., 'bash', 'python3', 'node', 'ruby'
-  baseImage: string; // e.g., 'alpine', 'python:3.9-alpine', 'node:18-alpine'
-  packageManager?: string; // e.g., 'pip', 'npm', 'gem', 'cargo'
-  dependencies?: string[]; // Detected from imports/requires
-}
+// Re-export node-specific types
+export type {
+  DetectedLanguage,
+  UsageInfo,
+} from '../nodes/script-analyzer/types';
+export type { ValidationResult } from '../utils/docker-validation';
 
-export interface UsageInfo {
-  command: string;
-  example: string;
-  expectedOutput: string;
-  testInput: string;
-}
-
-export interface ValidationResult {
-  isValid: boolean;
-  errors: string[];
-}
-
+// Shared types that depend on node-specific types
 export interface BuildResult {
   imageId: string;
   buildLogs: string;
@@ -34,25 +21,36 @@ export interface ExecutionResult {
 export interface DockerGenerationResult {
   dockerfile: string;
   detectedLanguage: DetectedLanguage;
+  usageInfo?: UsageInfo;
   validationResult?: ValidationResult;
   buildResult?: BuildResult;
   optimizationApplied?: boolean;
 }
 
+export type FailedStep =
+  | 'script_analysis'
+  | 'dockerfile_generation'
+  | 'dockerfile_optimization';
+
 export interface DockerGenerationState {
   scriptContent: string;
   scriptPath: string;
-  usageInfo: UsageInfo;
+  readmePath: string;
+  usageInfo?: UsageInfo;
   detectedLanguage?: DetectedLanguage;
   dockerfile?: string;
   validationResult?: ValidationResult;
   buildResult?: BuildResult;
   optimizationApplied?: boolean;
   // Retry tracking
+  scriptAnalysisRetries?: number;
   languageDetectionRetries?: number;
-  readmeAnalysisRetries?: number;
   dockerfileGenerationRetries?: number;
+  dockerfileOptimizationRetries?: number;
   maxRetries?: number;
+  // Error tracking
+  failedStep?: FailedStep;
+  errorMessage?: string;
 }
 
 export type LLMProvider = 'openai' | 'anthropic' | 'google';
@@ -63,3 +61,10 @@ export interface LLMConfig {
   maxTokens?: number;
   model?: string;
 }
+
+// Import to make it available when exporting
+import {
+  type DetectedLanguage,
+  type UsageInfo,
+} from '../nodes/script-analyzer/types';
+import { type ValidationResult } from '../utils/docker-validation';

@@ -1,6 +1,7 @@
-import { type DockerGenerationState } from '../types';
-import { DOCKERFILE_GENERATION_PROMPT } from '../prompts';
-import { type SupportedLLM } from '../config/llm-providers';
+import { type DockerGenerationState } from '../../types';
+import { DOCKERFILE_GENERATION_PROMPT } from './dockerfile-generation.prompts';
+import { type SupportedLLM } from '../../config/llm-providers';
+import { validateDockerfileSyntax } from '../../utils/docker-validation';
 
 const MAX_RETRIES = 3;
 
@@ -14,6 +15,12 @@ export async function dockerfileGenerationNode(
     if (!state.detectedLanguage) {
       throw new Error(
         'Language detection must be completed before Dockerfile generation'
+      );
+    }
+
+    if (!state.usageInfo) {
+      throw new Error(
+        'Usage info must be available before Dockerfile generation'
       );
     }
 
@@ -46,11 +53,27 @@ export async function dockerfileGenerationNode(
       throw new Error('Generated Dockerfile missing required FROM instruction');
     }
 
+    // Validate Dockerfile syntax with Docker
+    console.log('🔍 Validating Dockerfile syntax...');
+    const validationResult = await validateDockerfileSyntax(dockerfile);
+
+    if (!validationResult.isValid) {
+      console.log('❌ Dockerfile syntax validation failed:');
+      validationResult.errors.forEach((error) => {
+        console.log(`   - ${error}`);
+      });
+      throw new Error(
+        `Dockerfile validation failed: ${validationResult.errors.join(', ')}`
+      );
+    }
+
+    console.log('✅ Dockerfile syntax validated');
     console.log(`📝 Generated Dockerfile for ${state.detectedLanguage.name}`);
     console.log(`   Base image: ${state.detectedLanguage.baseImage}`);
 
     return {
       dockerfile,
+      validationResult,
       dockerfileGenerationRetries: 0, // Reset on success
     };
   } catch (error: any) {
@@ -64,6 +87,8 @@ export async function dockerfileGenerationNode(
     return {
       dockerfileGenerationRetries: retryCount + 1,
       maxRetries: MAX_RETRIES,
+      failedStep: 'dockerfile_generation',
+      errorMessage,
     };
   }
 }

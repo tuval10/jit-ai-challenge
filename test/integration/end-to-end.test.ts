@@ -3,48 +3,57 @@ import { LLMProviderFactory } from '../../src/config/llm-providers';
 import { join } from 'path';
 
 // Mock LLM for integration tests to avoid API calls
-const createMockLLM = () => ({
-  invoke: jest
-    .fn()
-    .mockResolvedValueOnce({
-      // README analysis response
-      content: JSON.stringify({
-        command: "python test-script.py '<input_text>'",
-        example: "python test-script.py 'Hello world test'",
-        expectedOutput: 'Word Count: 3',
-        testInput: 'Hello world test',
-      }),
-    })
-    .mockResolvedValueOnce({
-      // Language detection response
-      content: JSON.stringify({
-        name: 'python',
-        version: '3.9',
-        runtime: 'python3',
-        baseImage: 'python:3.9-alpine',
-        packageManager: 'pip',
-        dependencies: [],
-      }),
-    })
-    .mockResolvedValueOnce({
-      // Dockerfile generation response
-      content: `FROM python:3.9-alpine
-WORKDIR /app
-COPY test-script.py .
-RUN addgroup -g 1001 -S python && adduser -S python -u 1001
-USER python
-CMD ["python3", "test-script.py"]`,
-    })
-    .mockResolvedValueOnce({
-      // Optimization response
-      content: `FROM python:3.9-alpine
+const createMockLLM = () => {
+  // Use a mock implementation that always returns valid responses
+  return {
+    invoke: jest.fn().mockImplementation((messages: any) => {
+      const prompt = messages[0]?.content || '';
+
+      // Check what type of request this is based on the prompt
+      if (prompt.includes('comprehensive analysis of a script')) {
+        // Script analysis request - return JSON
+        return Promise.resolve({
+          content: JSON.stringify({
+            language: {
+              name: 'python',
+              version: '3.9',
+              runtime: 'python3',
+              baseImage: 'python:3.9-alpine',
+              packageManager: 'pip',
+              dependencies: [],
+            },
+            usage: {
+              command: "python test-script.py '<input_text>'",
+              example: "python test-script.py 'Hello world test'",
+              expectedOutput: 'Word Count: 3',
+              testInput: 'Hello world test',
+            },
+          }),
+        });
+      } else if (prompt.toLowerCase().includes('optimize')) {
+        // Optimization request - return Dockerfile
+        return Promise.resolve({
+          content: `FROM python:3.9-alpine
 WORKDIR /app
 RUN addgroup -g 1001 -S python && adduser -S python -u 1001
 COPY test-script.py .
 USER python
 CMD ["python3", "test-script.py"]`,
+        });
+      } else {
+        // Dockerfile generation request - return Dockerfile
+        return Promise.resolve({
+          content: `FROM python:3.9-alpine
+WORKDIR /app
+COPY test-script.py .
+RUN addgroup -g 1001 -S python && adduser -S python -u 1001
+USER python
+CMD ["python3", "test-script.py"]`,
+        });
+      }
     }),
-});
+  };
+};
 
 describe('End-to-End Integration Tests', () => {
   const scriptPath = join(__dirname, '../fixtures/test-script.py');
@@ -75,7 +84,7 @@ describe('End-to-End Integration Tests', () => {
     const dockerizer = new ScriptDockerizer(failingLLM as any);
 
     await expect(dockerizer.execute(scriptPath, readmePath)).rejects.toThrow(
-      'Failed to extract usage pattern'
+      'Script analysis failed after maximum retries'
     );
   });
 
