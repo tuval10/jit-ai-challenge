@@ -25,6 +25,7 @@ python word_reverser.py 'Hello world'
 ```
 
 Output:
+
 ```
 world Hello
 ```

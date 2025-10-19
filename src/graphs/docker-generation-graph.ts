@@ -1,19 +1,36 @@
-import { StateGraph } from "@langchain/langgraph";
-import { DockerGenerationState } from "../types";
+import { StateGraph } from '@langchain/langgraph';
+import { type DockerGenerationState } from '../types';
 import {
   languageDetectionNode,
   shouldRetryLanguageDetection,
-} from "../nodes/language-detection.node";
-import { dockerfileGenerationNode } from "../nodes/dockerfile-generation.node";
-import { syntaxValidationNode } from "../nodes/syntax-validation.node";
-import { dockerfileOptimizationNode } from "../nodes/dockerfile-optimization.node";
+} from '../nodes/language-detection.node';
+import { dockerfileGenerationNode } from '../nodes/dockerfile-generation.node';
+import { syntaxValidationNode } from '../nodes/syntax-validation.node';
+import { dockerfileOptimizationNode } from '../nodes/dockerfile-optimization.node';
+import { type SupportedLLM } from '../config/llm-providers';
 
-// Using any type for older LangGraph version compatibility
+// Route constants for type safety and consistency
+export const ROUTES = {
+  LANGUAGE_DETECTION: {
+    RETRY: 'retry',
+    CONTINUE: 'continue',
+    FAIL: 'fail',
+  },
+  VALIDATION: {
+    REGENERATE: 'regenerate',
+    OPTIMIZE: 'optimize',
+    FINALIZE: 'finalize',
+  },
+} as const;
+
+// Type for validation routes
+type ValidationRoute =
+  (typeof ROUTES.VALIDATION)[keyof typeof ROUTES.VALIDATION];
 
 export class DockerGenerationGraph {
-  private graph: any;
+  private readonly graph: ReturnType<typeof this.buildWorkflow>;
 
-  constructor(private llm: any) {
+  constructor(private readonly llm: SupportedLLM) {
     this.graph = this.buildWorkflow();
   }
 
@@ -35,63 +52,77 @@ export class DockerGenerationGraph {
     };
 
     const workflow = new StateGraph({ channels } as any)
-      .addNode("detect_language", async (state: DockerGenerationState) => {
+      .addNode('detect_language', async (state: DockerGenerationState) => {
         return await languageDetectionNode(state, this.llm);
       })
-      .addNode("generate_dockerfile", async (state: DockerGenerationState) => {
+      .addNode('generate_dockerfile', async (state: DockerGenerationState) => {
         return await dockerfileGenerationNode(state, this.llm);
       })
-      .addNode("validate_syntax", async (state: DockerGenerationState) => {
+      .addNode('validate_syntax', async (state: DockerGenerationState) => {
         return await syntaxValidationNode(state);
       })
-      .addNode("optimize_dockerfile", async (state: DockerGenerationState) => {
+      .addNode('optimize_dockerfile', async (state: DockerGenerationState) => {
         return await dockerfileOptimizationNode(state, this.llm);
       })
-      .addNode("handle_failure", async (_state: DockerGenerationState) => {
-        console.error("❌ Workflow failed after maximum retries");
-        throw new Error("Docker generation failed after maximum retries");
+      .addNode('handle_failure', async (_state: DockerGenerationState) => {
+        console.error('❌ Workflow failed after maximum retries');
+        throw new Error('Docker generation failed after maximum retries');
       })
       // Conditional edges with retry logic
       .addConditionalEdges(
-        "detect_language",
-        (state: any) => shouldRetryLanguageDetection(state),
+        'detect_language',
+        (state: unknown) =>
+          shouldRetryLanguageDetection(state as DockerGenerationState),
         {
-          retry: "detect_language", // Retry language detection
-          continue: "generate_dockerfile", // Success, continue to next step
-          fail: "handle_failure", // Failed after max retries
+          [ROUTES.LANGUAGE_DETECTION.RETRY]: 'detect_language', // Retry language detection
+          [ROUTES.LANGUAGE_DETECTION.CONTINUE]: 'generate_dockerfile', // Success, continue to next step
+          [ROUTES.LANGUAGE_DETECTION.FAIL]: 'handle_failure', // Failed after max retries
         }
       )
-      .addEdge("generate_dockerfile", "validate_syntax")
+      .addEdge('generate_dockerfile', 'validate_syntax')
       .addConditionalEdges(
-        "validate_syntax",
-        (state: any) => this.shouldRegenerateOrOptimize(state),
+        'validate_syntax',
+        (state: unknown) =>
+          this.shouldRegenerateOrOptimize(state as DockerGenerationState),
         {
-          regenerate: "generate_dockerfile",
-          optimize: "optimize_dockerfile",
-          finalize: "__end__",
+          [ROUTES.VALIDATION.REGENERATE]: 'generate_dockerfile',
+          [ROUTES.VALIDATION.OPTIMIZE]: 'optimize_dockerfile',
+          [ROUTES.VALIDATION.FINALIZE]: '__end__',
         }
       )
-      .addEdge("optimize_dockerfile", "__end__")
-      .addEdge("handle_failure", "__end__")
-      .setEntryPoint("detect_language");
+      .addEdge('optimize_dockerfile', 'validate_syntax')
+      .addEdge('handle_failure', '__end__')
+      .addEdge('__start__', 'detect_language');
 
     // Compile the workflow
     return workflow.compile();
   }
 
-  private shouldRegenerateOrOptimize(state: DockerGenerationState): string {
+  private shouldRegenerateOrOptimize(
+    state: DockerGenerationState
+  ): ValidationRoute {
+    const isPostOptimization = state.optimizationApplied;
+
     if (!state.validationResult?.isValid) {
-      console.log("🔄 Dockerfile validation failed, regenerating...");
-      return "regenerate";
+      if (isPostOptimization) {
+        console.log('🔄 Post-optimization validation failed, regenerating...');
+      } else {
+        console.log('🔄 Dockerfile validation failed, regenerating...');
+      }
+      return ROUTES.VALIDATION.REGENERATE;
     }
 
     if (!state.optimizationApplied) {
-      console.log("🔄 Proceeding to optimization...");
-      return "optimize";
+      console.log(
+        '🔄 Dockerfile validated successfully, proceeding to optimization...'
+      );
+      return ROUTES.VALIDATION.OPTIMIZE;
     }
 
-    console.log("✅ Dockerfile generation complete");
-    return "finalize";
+    console.log(
+      '✅ Post-optimization validation passed - Dockerfile generation complete'
+    );
+    return ROUTES.VALIDATION.FINALIZE;
   }
 
   async invoke(
@@ -101,43 +132,14 @@ export class DockerGenerationGraph {
       const result = await this.graph.invoke(initialState);
       return result as DockerGenerationState;
     } catch (error: any) {
-      // Provide more detailed error messages for common LangGraph issues
-      if (error.message?.includes("dead-end")) {
+      if (error.message?.includes('API key')) {
+        console.error('❌ Authentication Error:', error.message);
         console.error(
-          "❌ LangGraph Error: A node in the workflow has no outgoing edges."
-        );
-        console.error(
-          "💡 This usually means a node needs an edge to '__end__' or another node."
-        );
-      } else if (
-        error.message?.includes("node") &&
-        error.message?.includes("not found")
-      ) {
-        console.error(
-          "❌ LangGraph Error: Referenced a node that doesn't exist in the graph."
-        );
-        console.error(
-          "💡 Check that all conditional edge targets are defined as nodes."
-        );
-      } else if (error.message?.includes("API key")) {
-        console.error("❌ Authentication Error:", error.message);
-        console.error(
-          "💡 Make sure your LLM provider API key is valid and has sufficient credits."
+          '💡 Make sure your LLM provider API key is valid and has sufficient credits.'
         );
       } else {
-        console.error("❌ Graph execution failed:", error.message);
+        console.error('❌ Graph execution failed:', error.message);
       }
-      throw error;
-    }
-  }
-
-  async stream(
-    initialState: DockerGenerationState
-  ): Promise<AsyncIterable<any>> {
-    try {
-      return this.graph.stream(initialState);
-    } catch (error: any) {
-      console.error("Graph streaming failed:", error.message);
       throw error;
     }
   }

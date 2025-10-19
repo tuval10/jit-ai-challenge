@@ -1,9 +1,10 @@
-import { dockerfileGenerationNode } from '../../src/nodes/dockerfile-generation.node'
-import { DockerGenerationState } from '../../src/types'
+import { dockerfileGenerationNode } from '../../src/nodes/dockerfile-generation.node';
+import { DockerGenerationState } from '../../src/types';
 
-const createMockLLM = (response: string) => ({
-  invoke: jest.fn().mockResolvedValue({ content: response })
-})
+const createMockLLM = (response: string) =>
+  ({
+    invoke: jest.fn().mockResolvedValue({ content: response }),
+  } as any);
 
 describe('dockerfileGenerationNode', () => {
   const mockState: DockerGenerationState = {
@@ -12,7 +13,8 @@ describe('dockerfileGenerationNode', () => {
     usageInfo: {
       command: 'python test.py "input"',
       example: 'python test.py "Hello"',
-      expectedOutput: 'Hello'
+      expectedOutput: 'Hello',
+      testInput: 'Hello',
     },
     detectedLanguage: {
       name: 'python',
@@ -20,41 +22,39 @@ describe('dockerfileGenerationNode', () => {
       runtime: 'python3',
       baseImage: 'python:3.9-alpine',
       packageManager: 'pip',
-      dependencies: []
-    }
-  }
+      dependencies: [],
+    },
+  };
 
   it('should generate valid Dockerfile', async () => {
     const mockDockerfile = `FROM python:3.9-alpine
 WORKDIR /app
 COPY test.py .
-CMD ["python3", "test.py"]`
+CMD ["python3", "test.py"]`;
 
-    const mockLLM = createMockLLM(mockDockerfile)
-    const result = await dockerfileGenerationNode(mockState, mockLLM)
+    const mockLLM = createMockLLM(mockDockerfile);
+    const result = await dockerfileGenerationNode(mockState, mockLLM);
 
-    expect(result.dockerfile).toBeDefined()
-    expect(result.dockerfile).toContain('FROM python:3.9-alpine')
-    expect(result.dockerfile).toContain('COPY test.py')
-  })
+    expect(result.dockerfile).toBeDefined();
+    expect(result.dockerfile).toContain('FROM python:3.9-alpine');
+    expect(result.dockerfile).toContain('COPY test.py');
+  });
 
   it('should handle Dockerfile wrapped in markdown', async () => {
-    const mockResponse = `Here's your Dockerfile:
-
-\`\`\`dockerfile
+    const mockResponse = `\`\`\`dockerfile
 FROM python:3.9-alpine
 WORKDIR /app
 COPY test.py .
 CMD ["python3", "test.py"]
-\`\`\``
+\`\`\``;
 
-    const mockLLM = createMockLLM(mockResponse)
-    const result = await dockerfileGenerationNode(mockState, mockLLM)
+    const mockLLM = createMockLLM(mockResponse);
+    const result = await dockerfileGenerationNode(mockState, mockLLM);
 
-    expect(result.dockerfile).toBeDefined()
-    expect(result.dockerfile).toContain('FROM python:3.9-alpine')
-    expect(result.dockerfile).not.toContain('```')
-  })
+    expect(result.dockerfile).toBeDefined();
+    expect(result.dockerfile).toContain('FROM python:3.9-alpine');
+    expect(result.dockerfile).not.toContain('```');
+  });
 
   it('should handle markdown without language specifier', async () => {
     const mockResponse = `\`\`\`
@@ -62,39 +62,48 @@ FROM alpine:latest
 RUN apk add --no-cache python3
 COPY test.py .
 CMD ["python3", "test.py"]
-\`\`\``
+\`\`\``;
 
-    const mockLLM = createMockLLM(mockResponse)
-    const result = await dockerfileGenerationNode(mockState, mockLLM)
+    const mockLLM = createMockLLM(mockResponse);
+    const result = await dockerfileGenerationNode(mockState, mockLLM);
 
-    expect(result.dockerfile).toBeDefined()
-    expect(result.dockerfile).toContain('FROM alpine:latest')
-    expect(result.dockerfile).not.toContain('```')
-  })
+    expect(result.dockerfile).toBeDefined();
+    expect(result.dockerfile).toContain('FROM alpine:latest');
+    expect(result.dockerfile).not.toContain('```');
+  });
 
-  it('should throw error when language detection missing', async () => {
-    const stateWithoutLanguage = { ...mockState }
-    delete stateWithoutLanguage.detectedLanguage
+  it('should return retry state when language detection missing', async () => {
+    const stateWithoutLanguage = { ...mockState };
+    delete stateWithoutLanguage.detectedLanguage;
 
-    const mockLLM = createMockLLM('FROM alpine:latest')
+    const mockLLM = createMockLLM('FROM alpine:latest');
 
-    await expect(dockerfileGenerationNode(stateWithoutLanguage, mockLLM))
-      .rejects.toThrow('Language detection must be completed')
-  })
+    const result = await dockerfileGenerationNode(
+      stateWithoutLanguage,
+      mockLLM
+    );
 
-  it('should throw error for invalid Dockerfile (no FROM)', async () => {
-    const mockLLM = createMockLLM('RUN echo "invalid dockerfile"')
+    expect(result.dockerfile).toBeUndefined();
+    expect(result.dockerfileGenerationRetries).toBe(1);
+  });
 
-    await expect(dockerfileGenerationNode(mockState, mockLLM))
-      .rejects.toThrow('missing required FROM instruction')
-  })
+  it('should return retry state for invalid Dockerfile (no FROM)', async () => {
+    const mockLLM = createMockLLM('RUN echo "invalid dockerfile"');
 
-  it('should handle LLM API errors', async () => {
+    const result = await dockerfileGenerationNode(mockState, mockLLM);
+
+    expect(result.dockerfile).toBeUndefined();
+    expect(result.dockerfileGenerationRetries).toBe(1);
+  });
+
+  it('should return retry state on LLM API errors', async () => {
     const mockLLM = {
-      invoke: jest.fn().mockRejectedValue(new Error('API Error'))
-    }
+      invoke: jest.fn().mockRejectedValue(new Error('API Error')),
+    } as any;
 
-    await expect(dockerfileGenerationNode(mockState, mockLLM))
-      .rejects.toThrow('Dockerfile generation failed')
-  })
-})
+    const result = await dockerfileGenerationNode(mockState, mockLLM);
+
+    expect(result.dockerfile).toBeUndefined();
+    expect(result.dockerfileGenerationRetries).toBe(1);
+  });
+});

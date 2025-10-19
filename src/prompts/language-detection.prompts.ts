@@ -1,11 +1,19 @@
-import { UsageInfo } from '../types'
+import { zodToJsonSchema } from 'zod-to-json-schema';
+import { type UsageInfo } from '../types';
+import { DetectedLanguageSchema } from '../schemas';
 
 export const LANGUAGE_DETECTION_PROMPT = (
   scriptContent: string,
   scriptPath: string,
   usageInfo: UsageInfo,
-  retryAttempt?: number
-): string => `
+  retryAttempt?: number,
+): string => {
+  const jsonSchema = zodToJsonSchema(
+    DetectedLanguageSchema,
+    'DetectedLanguageSchema',
+  );
+
+  return `
 You are an expert software engineer tasked with analyzing a script and detecting its programming language and requirements.
 
 Script Path: ${scriptPath}
@@ -17,21 +25,18 @@ ${scriptContent}
 Usage Command: ${usageInfo.command}
 Example Usage: ${usageInfo.example}
 
-Analyze this script and return a JSON object with the following structure:
-{
-  "name": "language_name",        // REQUIRED: string, min 1 char
-  "version": "version_if_detectable",  // OPTIONAL: string
-  "runtime": "runtime_command",   // REQUIRED: string, min 1 char
-  "baseImage": "optimal_docker_base_image", // REQUIRED: string, min 1 char
-  "packageManager": "package_manager_if_needed", // OPTIONAL: string
-  "dependencies": ["list", "of", "dependencies"]  // OPTIONAL: array of strings, defaults to []
-}
+Analyze this script and return a JSON object matching this schema:
+${JSON.stringify(jsonSchema, null, 2)}
 
-${retryAttempt ? `
+${
+  retryAttempt
+    ? `
 ⚠️ RETRY ATTEMPT ${retryAttempt}: Previous response was invalid or incomplete.
 Please ensure ALL REQUIRED fields are provided with valid values.
 Focus on accuracy and completeness of the JSON structure.
-` : ''}
+`
+    : ''
+}
 
 Guidelines:
 - Detect the programming language from file extension, shebang, imports, or syntax
@@ -46,4 +51,5 @@ Example responses:
 - For Bash: {"name": "bash", "runtime": "bash", "baseImage": "alpine", "dependencies": []}
 
 Return only the JSON object, no additional text.
-`
+`;
+};

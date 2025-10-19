@@ -1,10 +1,10 @@
-import { DetectedLanguage, UsageInfo } from "../types";
-import { basename } from "path";
+import { type DetectedLanguage, type UsageInfo } from '../types';
+import { basename } from 'path';
 
 export const DOCKERFILE_GENERATION_PROMPT = (
   detectedLanguage: DetectedLanguage,
   usageInfo: UsageInfo,
-  scriptPath: string
+  scriptPath: string,
 ): string => {
   const scriptFilename = basename(scriptPath);
 
@@ -14,8 +14,8 @@ You are an expert DevOps engineer. Generate a Dockerfile for the following scrip
 Language: ${detectedLanguage.name}
 Runtime: ${detectedLanguage.runtime}
 Base Image: ${detectedLanguage.baseImage}
-Package Manager: ${detectedLanguage.packageManager || "none"}
-Dependencies: ${detectedLanguage.dependencies?.join(", ") || "none"}
+Package Manager: ${detectedLanguage.packageManager ?? 'none'}
+Dependencies: ${detectedLanguage.dependencies?.join(', ') ?? 'none'}
 
 Script Filename: ${scriptFilename}
 Usage Command: ${usageInfo.command}

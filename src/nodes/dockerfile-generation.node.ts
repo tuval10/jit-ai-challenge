@@ -1,18 +1,19 @@
-import { DockerGenerationState } from "../types";
-import { DOCKERFILE_GENERATION_PROMPT } from "../prompts";
+import { type DockerGenerationState } from '../types';
+import { DOCKERFILE_GENERATION_PROMPT } from '../prompts';
+import { type SupportedLLM } from '../config/llm-providers';
 
 const MAX_RETRIES = 3;
 
 export async function dockerfileGenerationNode(
   state: DockerGenerationState,
-  llm: any
+  llm: SupportedLLM
 ): Promise<Partial<DockerGenerationState>> {
-  const retryCount = state.dockerfileGenerationRetries || 0;
+  const retryCount = state.dockerfileGenerationRetries ?? 0;
 
   try {
     if (!state.detectedLanguage) {
       throw new Error(
-        "Language detection must be completed before Dockerfile generation"
+        'Language detection must be completed before Dockerfile generation'
       );
     }
 
@@ -22,23 +23,27 @@ export async function dockerfileGenerationNode(
       state.scriptPath
     );
 
-    const response = await llm.invoke([{ role: "user", content: prompt }]);
+    const response = await llm.invoke([{ role: 'user', content: prompt }]);
 
-    let dockerfile = response.content.trim();
+    const responseText =
+      typeof response.content === 'string'
+        ? response.content
+        : JSON.stringify(response.content);
+    let dockerfile = responseText.trim();
 
     // Clean up the response - remove markdown if present
     if (
-      dockerfile.startsWith("```dockerfile") ||
-      dockerfile.startsWith("```")
+      dockerfile.startsWith('```dockerfile') ||
+      dockerfile.startsWith('```')
     ) {
       dockerfile = dockerfile
-        .replace(/^```(dockerfile)?\n/, "")
-        .replace(/\n```$/, "");
+        .replace(/^```(dockerfile)?\n/, '')
+        .replace(/\n```$/, '');
     }
 
     // Validate basic Dockerfile structure
-    if (!dockerfile.includes("FROM ")) {
-      throw new Error("Generated Dockerfile missing required FROM instruction");
+    if (!dockerfile.includes('FROM ')) {
+      throw new Error('Generated Dockerfile missing required FROM instruction');
     }
 
     console.log(`📝 Generated Dockerfile for ${state.detectedLanguage.name}`);
@@ -66,13 +71,13 @@ export async function dockerfileGenerationNode(
 // Helper function to determine if we should retry dockerfile generation
 export function shouldRetryDockerfileGeneration(
   state: DockerGenerationState
-): "retry" | "fail" | "continue" {
-  const retryCount = state.dockerfileGenerationRetries || 0;
-  const maxRetries = state.maxRetries || MAX_RETRIES;
+): 'retry' | 'fail' | 'continue' {
+  const retryCount = state.dockerfileGenerationRetries ?? 0;
+  const maxRetries = state.maxRetries ?? MAX_RETRIES;
 
   // If we have a dockerfile, continue
-  if (state.dockerfile && state.dockerfile.includes("FROM ")) {
-    return "continue";
+  if (state.dockerfile && state.dockerfile.includes('FROM ')) {
+    return 'continue';
   }
 
   // If we haven't exceeded retries, retry
@@ -80,10 +85,10 @@ export function shouldRetryDockerfileGeneration(
     console.log(
       `⚠️  Dockerfile generation failed, retrying (${retryCount}/${maxRetries})`
     );
-    return "retry";
+    return 'retry';
   }
 
   // Otherwise, fail
-  console.error("❌ Dockerfile generation failed after maximum retries");
-  return "fail";
+  console.error('❌ Dockerfile generation failed after maximum retries');
+  return 'fail';
 }

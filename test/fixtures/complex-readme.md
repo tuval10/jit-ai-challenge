@@ -42,6 +42,7 @@ python3 advanced-script.py --input="Test input"
 ```
 
 Expected result:
+
 ```
 Processing text: Test input
 Result: Character count is 10

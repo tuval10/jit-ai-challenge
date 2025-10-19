@@ -1,19 +1,19 @@
-import { readFile } from "fs/promises";
-import { UsageInfo } from "../types";
-import { README_ANALYSIS_PROMPT } from "../prompts";
+import { readFile } from 'fs/promises';
+import { type UsageInfo } from '../types';
+import { README_ANALYSIS_PROMPT } from '../prompts';
 import {
   validateUsageInfo,
   safeJsonParse,
-  ValidatedUsageInfo,
-} from "../schemas";
-import { SupportedLLM } from "../config/llm-providers";
+  type ValidatedUsageInfo,
+} from '../schemas';
+import { type SupportedLLM } from '../config/llm-providers';
 
 export interface ScriptAnalyzer {
-  extractUsagePattern(
+  extractUsagePattern: (
     readmePath: string,
     llm: SupportedLLM
-  ): Promise<UsageInfo>;
-  readScriptContent(scriptPath: string): Promise<string>;
+  ) => Promise<UsageInfo>;
+  readScriptContent: (scriptPath: string) => Promise<string>;
 }
 
 export class ScriptAnalyzerImpl implements ScriptAnalyzer {
@@ -22,17 +22,17 @@ export class ScriptAnalyzerImpl implements ScriptAnalyzer {
     llm: SupportedLLM
   ): Promise<UsageInfo> {
     try {
-      const readmeContent = await readFile(readmePath, "utf8");
+      const readmeContent = await readFile(readmePath, 'utf8');
 
       // Use LLM for robust README analysis
       const prompt = README_ANALYSIS_PROMPT(readmeContent, readmePath);
 
-      console.log("🔍 Analyzing README with AI...");
-      const response = await llm.invoke([{ role: "user", content: prompt }]);
+      console.log('🔍 Analyzing README with AI...');
+      const response = await llm.invoke([{ role: 'user', content: prompt }]);
 
       // Extract string content from LLM response
       const responseContent =
-        typeof response.content === "string"
+        typeof response.content === 'string'
           ? response.content
           : JSON.stringify(response.content);
 
@@ -58,7 +58,7 @@ export class ScriptAnalyzerImpl implements ScriptAnalyzer {
         }
       }
 
-      console.log("✅ README analysis completed");
+      console.log('✅ README analysis completed');
       console.log(`   Command: ${usageInfo.command}`);
       console.log(`   Example: ${usageInfo.example}`);
 
@@ -72,7 +72,7 @@ export class ScriptAnalyzerImpl implements ScriptAnalyzer {
 
   async readScriptContent(scriptPath: string): Promise<string> {
     try {
-      return await readFile(scriptPath, "utf8");
+      return await readFile(scriptPath, 'utf8');
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);

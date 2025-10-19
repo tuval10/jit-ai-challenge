@@ -31,6 +31,7 @@ This is a test.'
 ```
 
 Output:
+
 ```
 Line Count: 2
 ```

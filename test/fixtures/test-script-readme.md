@@ -22,6 +22,7 @@ python test-script.py 'Hello world test'
 ```
 
 Output:
+
 ```
 Word Count: 3
 ```

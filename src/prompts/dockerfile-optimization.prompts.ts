@@ -1,6 +1,9 @@
-import { DetectedLanguage } from '../types'
+import { type DetectedLanguage } from '../types';
 
-export const DOCKERFILE_OPTIMIZATION_PROMPT = (dockerfile: string, detectedLanguage: DetectedLanguage): string => `
+export const DOCKERFILE_OPTIMIZATION_PROMPT = (
+  dockerfile: string,
+  detectedLanguage: DetectedLanguage,
+): string => `
 You are a Docker optimization expert. Optimize the following Dockerfile for production use.
 
 Current Dockerfile:
@@ -19,7 +22,7 @@ Apply these optimizations:
 5. Optimize for Docker layer caching
 6. Add proper file permissions
 7. Remove build dependencies after installation
-8. Add .dockerignore considerations in comments
+8. Add comments for each step in the Dockerfile, don't add other comments.
 
 Guidelines:
 - Keep the same functionality
@@ -28,4 +31,4 @@ Guidelines:
 - Ensure the script still works with the expected usage command
 
 Return only the optimized Dockerfile content, no additional text or markdown.
-`
+`;

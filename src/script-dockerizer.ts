@@ -1,24 +1,30 @@
-import { ScriptAnalyzer, ScriptAnalyzerImpl } from "./core/script-analyzer";
-import { DockerManager, DockerManagerImpl } from "./core/docker-manager";
-import { DockerGenerationGraph } from "./graphs/docker-generation-graph";
-import { SupportedLLM } from "./config/llm-providers";
-import { DockerGenerationState, DockerGenerationResult } from "./types";
-import { access, constants } from "fs/promises";
-import { exec } from "child_process";
-import { promisify } from "util";
-import { resolve } from "path";
+import {
+  type ScriptAnalyzer,
+  ScriptAnalyzerImpl,
+} from './core/script-analyzer';
+import { type DockerManager, DockerManagerImpl } from './core/docker-manager';
+import { DockerGenerationGraph } from './graphs/docker-generation-graph';
+import { type SupportedLLM } from './config/llm-providers';
+import {
+  type DockerGenerationState,
+  type DockerGenerationResult,
+} from './types';
+import { access, constants } from 'fs/promises';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import { resolve } from 'path';
 
 const execAsync = promisify(exec);
 
 export class ScriptDockerizer {
-  private analyzer: ScriptAnalyzer;
-  private dockerManager: DockerManager;
-  private graph: DockerGenerationGraph;
+  private readonly analyzer: ScriptAnalyzer;
+  private readonly dockerManager: DockerManager;
+  private readonly graph: DockerGenerationGraph;
 
   constructor(
-    private llm: SupportedLLM,
+    private readonly llm: SupportedLLM,
     analyzer?: ScriptAnalyzer,
-    dockerManager?: DockerManager
+    dockerManager?: DockerManager,
   ) {
     this.analyzer = analyzer || new ScriptAnalyzerImpl();
     this.dockerManager = dockerManager || new DockerManagerImpl();
@@ -27,10 +33,10 @@ export class ScriptDockerizer {
 
   private async checkDockerRunning(): Promise<void> {
     try {
-      await execAsync("docker info");
+      await execAsync('docker info');
     } catch (error: any) {
       throw new Error(
-        "Docker daemon is not running. Please start Docker Desktop and try again."
+        'Docker daemon is not running. Please start Docker Desktop and try again.',
       );
     }
   }
@@ -38,13 +44,13 @@ export class ScriptDockerizer {
   async execute(
     scriptPath: string,
     readmePath: string,
-    options: { test?: boolean; cleanup?: boolean } = {}
+    options: { skipTest?: boolean; cleanup?: boolean } = {},
   ): Promise<DockerGenerationResult> {
     if (!scriptPath) {
-      throw new Error("scriptPath is required");
+      throw new Error('scriptPath is required');
     }
     if (!readmePath) {
-      throw new Error("readmePath is required");
+      throw new Error('readmePath is required');
     }
 
     // Resolve paths to absolute paths
@@ -86,36 +92,38 @@ export class ScriptDockerizer {
       const result = await this.graph.invoke(initialState);
 
       if (!result.dockerfile || !result.detectedLanguage) {
-        throw new Error("Failed to generate Dockerfile");
+        throw new Error('Failed to generate Dockerfile');
       }
 
-      console.log("📄 Generated Dockerfile:");
-      console.log("─".repeat(50));
+      console.log('📄 Generated Dockerfile:');
+      console.log('─'.repeat(50));
       console.log(result.dockerfile);
-      console.log("─".repeat(50));
+      console.log('─'.repeat(50));
 
       // Step 3: Build Docker image
       const buildResult = await this.dockerManager.buildImage(
         result.dockerfile,
-        "/tmp/claude",
-        absoluteScriptPath
+        '/tmp/claude',
+        absoluteScriptPath,
       );
 
       if (!buildResult.success) {
         throw new Error(`Docker build failed: ${buildResult.buildLogs}`);
       }
 
-      // Step 4: Test the image if requested
-      if (options.test) {
-        console.log("🧪 Testing Docker image...");
+      // Step 4: Test the image (unless skipped)
+      if (!options.skipTest) {
+        console.log('🧪 Testing Docker image...');
         const testPassed = await this.dockerManager.testScript(
           buildResult.imageId,
-          usageInfo
+          usageInfo,
         );
 
         if (!testPassed) {
-          throw new Error("Docker image test failed");
+          throw new Error('Docker image test failed');
         }
+      } else {
+        console.log('⏭️  Skipping tests...');
       }
 
       // Step 5: Cleanup if requested
@@ -124,7 +132,7 @@ export class ScriptDockerizer {
       } else {
         console.log(`💾 Docker image created: ${buildResult.imageId}`);
         console.log(
-          `   Run with: docker run --rm ${buildResult.imageId} <script> "<input>"`
+          `   Run with: docker run --rm ${buildResult.imageId} "<input>"`,
         );
       }
 
@@ -136,18 +144,8 @@ export class ScriptDockerizer {
         optimizationApplied: result.optimizationApplied,
       };
     } catch (error: any) {
-      console.error("❌ Docker generation failed:", error.message);
+      console.error('❌ Docker generation failed:', error.message);
       throw error;
     }
   }
-
-  // TODO: Fix LangGraph streaming types
-  // async streamExecution(
-  //   scriptPath: string,
-  //   readmePath: string,
-  //   options: { test?: boolean; cleanup?: boolean } = {}
-  // ): Promise<DockerGenerationResult> {
-  //   // Streaming functionality temporarily disabled due to TypeScript issues
-  //   return this.execute(scriptPath, readmePath, options);
-  // }
 }

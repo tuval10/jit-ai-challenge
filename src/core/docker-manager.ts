@@ -1,28 +1,33 @@
-import { exec } from "child_process";
-import { promisify } from "util";
-import { writeFile, unlink, mkdir } from "fs/promises";
-import { join } from "path";
-import { ValidationResult, BuildResult, ExecutionResult } from "../types";
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import { writeFile, unlink, mkdir } from 'fs/promises';
+import { join } from 'path';
+import {
+  type ValidationResult,
+  type BuildResult,
+  type ExecutionResult,
+  type UsageInfo,
+} from '../types';
 
 const execAsync = promisify(exec);
 
 export interface DockerManager {
-  validateDockerfile(dockerfileContent: string): Promise<ValidationResult>;
-  buildImage(
+  validateDockerfile: (dockerfileContent: string) => Promise<ValidationResult>;
+  buildImage: (
     dockerfile: string,
     context: string,
-    scriptPath: string
-  ): Promise<BuildResult>;
-  runContainer(imageId: string, args: string[]): Promise<ExecutionResult>;
-  testScript(imageId: string, usageInfo: any): Promise<boolean>;
-  cleanup(imageId: string): Promise<void>;
+    scriptPath: string,
+  ) => Promise<BuildResult>;
+  runContainer: (imageId: string, args: string[]) => Promise<ExecutionResult>;
+  testScript: (imageId: string, usageInfo: UsageInfo) => Promise<boolean>;
+  cleanup: (imageId: string) => Promise<void>;
 }
 
 export class DockerManagerImpl implements DockerManager {
-  private tempDir = "/tmp/claude";
+  private readonly tempDir = '/tmp/claude';
 
   async validateDockerfile(
-    dockerfileContent: string
+    dockerfileContent: string,
   ): Promise<ValidationResult> {
     const tempPath = join(this.tempDir, `Dockerfile.${Date.now()}`);
 
@@ -42,7 +47,7 @@ export class DockerManagerImpl implements DockerManager {
       await unlink(tempPath).catch(() => {}); // cleanup on error
       return {
         isValid: false,
-        errors: [error.message || "Dockerfile validation failed"],
+        errors: [(error as Error).message ?? 'Dockerfile validation failed'],
       };
     }
   }
@@ -50,7 +55,7 @@ export class DockerManagerImpl implements DockerManager {
   async buildImage(
     dockerfile: string,
     _context: string,
-    scriptPath: string
+    scriptPath: string,
   ): Promise<BuildResult> {
     const timestamp = Date.now();
     const dockerfilePath = join(this.tempDir, `Dockerfile.${timestamp}`);
@@ -65,13 +70,13 @@ export class DockerManagerImpl implements DockerManager {
       await writeFile(dockerfilePath, dockerfile);
       await execAsync(`cp "${scriptPath}" "${contextDir}/"`);
 
-      console.log("🏗️  Building Docker image...");
+      console.log('🏗️  Building Docker image...');
 
       // Build the image
       const buildCommand = `docker build -f ${dockerfilePath} -t ${imageTag} ${contextDir}`;
       const { stdout, stderr } = await execAsync(buildCommand);
 
-      console.log("✅ Docker image built successfully");
+      console.log('✅ Docker image built successfully');
 
       // Cleanup temp files
       await unlink(dockerfilePath).catch(() => {});
@@ -83,14 +88,14 @@ export class DockerManagerImpl implements DockerManager {
         success: true,
       };
     } catch (error: any) {
-      console.error("❌ Docker build failed:", error.message);
+      console.error('❌ Docker build failed:', error.message);
 
       // Cleanup on failure
       await unlink(dockerfilePath).catch(() => {});
       await execAsync(`rm -rf ${contextDir}`).catch(() => {});
 
       return {
-        imageId: "",
+        imageId: '',
         buildLogs: error.message,
         success: false,
       };
@@ -99,16 +104,16 @@ export class DockerManagerImpl implements DockerManager {
 
   async runContainer(
     imageId: string,
-    args: string[]
+    args: string[],
   ): Promise<ExecutionResult> {
     try {
       console.log(`🐳 Running container: ${imageId}`);
-      console.log(`   Args: ${args.join(" ")}`);
+      console.log(`   Args: ${args.join(' ')}`);
 
-      const command = `docker run --rm ${imageId} ${args.join(" ")}`;
+      const command = `docker run --rm ${imageId} ${args.join(' ')}`;
       const { stdout, stderr } = await execAsync(command);
 
-      console.log("✅ Container execution completed");
+      console.log('✅ Container execution completed');
 
       return {
         stdout: stdout.trim(),
@@ -116,12 +121,12 @@ export class DockerManagerImpl implements DockerManager {
         exitCode: 0,
       };
     } catch (error: any) {
-      console.error("❌ Container execution failed:", error.message);
+      console.error('❌ Container execution failed:', error.message);
 
       return {
-        stdout: "",
+        stdout: '',
         stderr: error.message,
-        exitCode: error.code || 1,
+        exitCode: error.code ?? 1,
       };
     }
   }
@@ -135,21 +140,15 @@ export class DockerManagerImpl implements DockerManager {
     }
   }
 
-  async testScript(imageId: string, usageInfo: any): Promise<boolean> {
+  async testScript(imageId: string, usageInfo: UsageInfo): Promise<boolean> {
     try {
-      // Extract the script command from usage info
-      const commandParts = usageInfo.command.split(" ");
-      const scriptName = commandParts[commandParts.length - 2]; // Get script name
-      const testInput = usageInfo.example.split("'")[1]; // Extract input from example
-
       // Run the script with test input
       const result = await this.runContainer(imageId, [
-        scriptName,
-        `"${testInput}"`,
+        `"${usageInfo.testInput}"`,
       ]);
 
       if (result.exitCode !== 0) {
-        console.error("❌ Script execution failed");
+        console.error('❌ Script execution failed');
         return false;
       }
 
@@ -158,18 +157,18 @@ export class DockerManagerImpl implements DockerManager {
       const actualOutput = result.stdout.trim();
 
       if (actualOutput === expectedOutput) {
-        console.log("✅ Script test passed");
+        console.log('✅ Script test passed');
         console.log(`   Expected: ${expectedOutput}`);
         console.log(`   Actual: ${actualOutput}`);
         return true;
       } else {
-        console.log("❌ Script test failed");
+        console.log('❌ Script test failed');
         console.log(`   Expected: ${expectedOutput}`);
         console.log(`   Actual: ${actualOutput}`);
         return false;
       }
     } catch (error: any) {
-      console.error("❌ Script testing failed:", error.message);
+      console.error('❌ Script testing failed:', error.message);
       return false;
     }
   }

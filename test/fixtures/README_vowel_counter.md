@@ -25,6 +25,7 @@ node vowel_counter.js 'Hello world'
 ```
 
 Output:
+
 ```
 Vowel Count: 3
 ```
